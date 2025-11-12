@@ -1,4 +1,7 @@
 using UnityEngine;
+using System.Collections;  // ✅ required for IEnumerator
+
+
 
 public class CraneController : MonoBehaviour
 {
@@ -26,6 +29,7 @@ public class CraneController : MonoBehaviour
 
         if ((Input.GetMouseButtonDown(0) || Input.GetKeyDown(KeyCode.Space)) && currentCar != null)
         {
+            currentCar.transform.localRotation = Quaternion.Euler(0, 0, Mathf.Sin(Time.time * 3f) * 2f);
             DropCar();
         }
     }
@@ -43,18 +47,33 @@ public class CraneController : MonoBehaviour
     {
         currentCar = Instantiate(carPrefab, hookPoint.position, Quaternion.identity);
         currentCar.transform.parent = hookPoint;
-        currentCar.GetComponent<Rigidbody2D>().isKinematic = true;
+
+        Rigidbody2D rb = currentCar.GetComponent<Rigidbody2D>();
+        if (rb == null)
+            rb = currentCar.AddComponent<Rigidbody2D>();
+
+        rb.bodyType = RigidbodyType2D.Kinematic; // replaces isKinematic = true
+        rb.gravityScale = 0f; // no gravity while attached to crane
     }
 
     void DropCar()
     {
         currentCar.transform.parent = null;
-        var rb = currentCar.GetComponent<Rigidbody2D>();
-        rb.isKinematic = false;
-        rb.gravityScale = 1f;
+        Rigidbody2D rb = currentCar.GetComponent<Rigidbody2D>();
+        currentCar.transform.rotation = Quaternion.Euler(0, 0, Random.Range(-3f, 3f));
 
+        rb.bodyType = RigidbodyType2D.Dynamic;
+        rb.gravityScale = 0.5f; // slightly softer fall start
+    
+        StartCoroutine(EnableFullGravity(rb, 0.2f));
         currentCar.AddComponent<CarDropDetector>();
-
         Invoke(nameof(SpawnNewCar), 1.2f);
     }
+    
+    IEnumerator EnableFullGravity(Rigidbody2D rb, float delay)
+    {
+        yield return new WaitForSeconds(delay);
+        rb.gravityScale = 1f;
+    }
+
 }

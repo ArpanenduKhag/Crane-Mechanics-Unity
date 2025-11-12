@@ -1,13 +1,17 @@
 using UnityEngine;
 using TMPro;
+using System.Collections;
 
 public class StackManager : MonoBehaviour
 {
     public static StackManager Instance;
 
     [Header("Stack Settings")]
-    public float maxOffset = 1.2f;       // how far off from last car is allowed
-    public float perfectThreshold = 0.2f; // perfect stack range
+    public float maxOffset = 1.2f;          // Maximum allowed X misalignment before failing
+    public float perfectThreshold = 0.2f;   // Distance range considered a perfect drop
+    public float settleTime = 2.0f;         // Time before checking stability
+    public float tipThreshold = 20f;        // Max tilt (in degrees) before considered tipped over
+    public float fallThresholdY = -10f;     // Y-position limit before considered fallen
 
     [Header("UI")]
     public TMP_Text scoreText;
@@ -27,12 +31,11 @@ public class StackManager : MonoBehaviour
     {
         if (firstCarPlaced) return;
 
-        // First car becomes base
         firstCarPlaced = true;
         lastCar = car;
 
         Rigidbody2D rb = car.GetComponent<Rigidbody2D>();
-        rb.bodyType = RigidbodyType2D.Static;
+        rb.bodyType = RigidbodyType2D.Static; // Base should never move
 
         score = 1;
         UpdateScoreUI();
@@ -43,14 +46,14 @@ public class StackManager : MonoBehaviour
     {
         if (gameOver) return;
 
-        // If the new car hits the base instead of the last car → Game Over
+        // Prevent hitting the base directly
         if (hitObject.CompareTag("Base"))
         {
             GameOver("❌ Hit the base again!");
             return;
         }
 
-        // Check if landed on last stacked car
+        // Valid landing — only if it hits the last stacked car
         if (hitObject == lastCar)
         {
             float offset = Mathf.Abs(newCar.transform.position.x - lastCar.transform.position.x);
@@ -61,7 +64,6 @@ public class StackManager : MonoBehaviour
                 return;
             }
 
-            // Perfect or good drop
             if (offset < perfectThreshold)
                 Debug.Log("💥 Perfect Drop!");
             else
@@ -70,18 +72,45 @@ public class StackManager : MonoBehaviour
             score++;
             UpdateScoreUI();
 
-            // Freeze new car as part of the stack
-            Rigidbody2D rb = newCar.GetComponent<Rigidbody2D>();
-            rb.bodyType = RigidbodyType2D.Static;
-
-            // Update the top of the stack
+            // Let physics determine if it’s stable or falls off
+            StartCoroutine(CheckCarStability(newCar));
             lastCar = newCar;
         }
         else
         {
-            // Landed on something else → Game Over
+            // Hit something that’s not the last car — fail
             GameOver("❌ Not stacked properly!");
         }
+    }
+
+    IEnumerator CheckCarStability(GameObject car)
+    {
+        Rigidbody2D rb = car.GetComponent<Rigidbody2D>();
+
+        // Wait a short period for initial impact to settle
+        yield return new WaitForSeconds(settleTime);
+
+        // Wait until motion nearly stops (helps avoid false triggers)
+        while (rb != null && (rb.linearVelocity.magnitude > 0.1f || Mathf.Abs(rb.angularVelocity) > 0.1f))
+            yield return null;
+
+        if (car == null) yield break;
+
+        float zRotation = Mathf.Abs(car.transform.eulerAngles.z);
+        if (zRotation > 180f) zRotation = 360f - zRotation; // normalize rotation (e.g., 350° = 10°)
+
+        // Fail if car has fallen off or tipped beyond threshold
+        if (car.transform.position.y < fallThresholdY || zRotation > tipThreshold)
+        {
+            GameOver("💥 Car fell or tipped over!");
+            yield break;
+        }
+
+        // Freeze stable car as part of the stack
+        rb.bodyType = RigidbodyType2D.Static;
+        rb.linearVelocity = Vector2.zero;
+        rb.angularVelocity = 0f;
+        Debug.Log("🚗 Car stabilized and locked in place.");
     }
 
     void GameOver(string message)
