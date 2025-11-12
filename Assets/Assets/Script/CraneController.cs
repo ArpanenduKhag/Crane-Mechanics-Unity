@@ -19,6 +19,9 @@ public class CraneController : MonoBehaviour
 
     void Update()
     {
+        if (StackManager.Instance != null && StackManager.Instance.IsGameOver())
+            return;
+
         MoveCrane();
 
         if ((Input.GetMouseButtonDown(0) || Input.GetKeyDown(KeyCode.Space)) && currentCar != null)
@@ -50,6 +53,8 @@ public class CraneController : MonoBehaviour
         rb.isKinematic = false;
         rb.gravityScale = 1f;
 
-        Invoke(nameof(SpawnNewCar), 1f); // Delay to spawn next car
+        currentCar.AddComponent<CarDropDetector>();
+
+        Invoke(nameof(SpawnNewCar), 1.2f);
     }
 }
